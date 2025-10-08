@@ -1,0 +1,115 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Transaksi;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+
+class TransaksiController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        $transaksis = Transaksi::with('user')
+            ->latest()
+            ->paginate(10);
+
+        return Inertia::render('transaksi/index', [
+            'transaksis' => $transaksis,
+        ]);
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        return redirect()->route('transaksi.index');
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'nama_transaksi' => 'required|string|max:255',
+            'nominal' => 'required|numeric|min:0',
+            'tanggal' => 'required|date',
+            'jenis' => 'required|in:pemasukan,pengeluaran',
+        ]);
+
+        $validated['user_id'] = auth()->id();
+
+        Transaksi::create($validated);
+
+        return redirect()->route('transaksi.index')
+            ->with('success', 'Transaksi berhasil ditambahkan.');
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(Transaksi $transaksi)
+    {
+        if ($transaksi->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        return Inertia::render('transaksi/show', [
+            'transaksi' => $transaksi->load('user'),
+        ]);
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(Transaksi $transaksi)
+    {
+        if ($transaksi->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        return redirect()->route('transaksi.index');
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, Transaksi $transaksi)
+    {
+        if ($transaksi->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'nama_transaksi' => 'required|string|max:255',
+            'nominal' => 'required|numeric|min:0',
+            'tanggal' => 'required|date',
+            'jenis' => 'required|in:pemasukan,pengeluaran',
+        ]);
+
+        $transaksi->update($validated);
+
+        return redirect()->route('transaksi.index')
+            ->with('success', 'Transaksi berhasil diupdate.');
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(Transaksi $transaksi)
+    {
+        if ($transaksi->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $transaksi->delete();
+
+        return redirect()->route('transaksi.index')
+            ->with('success', 'Transaksi berhasil dihapus.');
+    }
+}
