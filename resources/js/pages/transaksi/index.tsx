@@ -63,9 +63,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function Index({ transaksis }: Props) {
-    const { props } = usePage();
-    const currentUserId = (props.auth as any)?.user?.id;
-
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -189,7 +186,10 @@ export default function Index({ transaksis }: Props) {
     ) => {
         // Simpan nilai asli tanpa pemisah
         const rawValue = value.replace(/\./g, '');
-        form.setData('nominal', rawValue);
+        form.setData({
+            ...form.data,
+            nominal: rawValue,
+        });
     };
 
     return (
@@ -282,7 +282,6 @@ export default function Index({ transaksis }: Props) {
                                                         onClick={() =>
                                                             handleEdit(item)
                                                         }
-                                                        disabled={item.user_id !== currentUserId}
                                                     >
                                                         <Pencil className="h-4 w-4" />
                                                     </Button>
@@ -295,7 +294,6 @@ export default function Index({ transaksis }: Props) {
                                                             )
                                                         }
                                                         className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
-                                                        disabled={item.user_id !== currentUserId}
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>

@@ -42,7 +42,7 @@ class TransaksiController extends Controller
             'jenis' => 'required|in:pemasukan,pengeluaran',
         ]);
 
-        $validated['user_id'] = auth()->id();
+        $validated['user_id'] = auth()->user()->id;
 
         Transaksi::create($validated);
 
@@ -55,10 +55,6 @@ class TransaksiController extends Controller
      */
     public function show(Transaksi $transaksi)
     {
-        if ($transaksi->user_id !== auth()->id()) {
-            abort(403);
-        }
-
         return Inertia::render('transaksi/show', [
             'transaksi' => $transaksi->load('user'),
         ]);
@@ -69,10 +65,6 @@ class TransaksiController extends Controller
      */
     public function edit(Transaksi $transaksi)
     {
-        if ($transaksi->user_id !== auth()->id()) {
-            abort(403);
-        }
-
         return redirect()->route('transaksi.index');
     }
 
@@ -81,10 +73,6 @@ class TransaksiController extends Controller
      */
     public function update(Request $request, Transaksi $transaksi)
     {
-        if ($transaksi->user_id !== auth()->id()) {
-            abort(403);
-        }
-
         $validated = $request->validate([
             'nama_transaksi' => 'required|string|max:255',
             'nominal' => 'required|numeric|min:0',
@@ -103,10 +91,6 @@ class TransaksiController extends Controller
      */
     public function destroy(Transaksi $transaksi)
     {
-        if ($transaksi->user_id !== auth()->id()) {
-            abort(403);
-        }
-
         $transaksi->delete();
 
         return redirect()->route('transaksi.index')
