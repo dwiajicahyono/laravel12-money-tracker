@@ -69,10 +69,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
-    console.log('Statistics:', statistics);
-    console.log('Pie Data Bulan Ini:', statistics.pemasukan_bulan_ini, statistics.pengeluaran_bulan_ini);
-    console.log('Pie Data Total:', statistics.pemasukan_total, statistics.pengeluaran_total);
-
     const [isCreateOpen, setIsCreateOpen] = useState(false);
 
     const getTodayDate = () => {
@@ -260,7 +256,7 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
                                             cx="50%"
                                             cy="50%"
                                             labelLine={false}
-                                            label={({ name, percent }) =>
+                                            label={({ name, percent }: any) =>
                                                 `${name}: ${(percent * 100).toFixed(0)}%`
                                             }
                                             outerRadius={80}
@@ -317,7 +313,7 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
                                             cx="50%"
                                             cy="50%"
                                             labelLine={false}
-                                            label={({ name, percent }) =>
+                                            label={({ name, percent }: any) =>
                                                 `${name}: ${(percent * 100).toFixed(0)}%`
                                             }
                                             outerRadius={80}
