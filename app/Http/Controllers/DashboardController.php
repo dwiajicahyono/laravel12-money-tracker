@@ -11,50 +11,45 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        // Pengeluaran bulan ini (semua user)
-        $pengeluaranBulanIni = Transaksi::where('jenis', 'pengeluaran')
-            ->whereMonth('tanggal', Carbon::now()->month)
-            ->whereYear('tanggal', Carbon::now()->year)
+        $user = auth()->user();
+
+        // Ensure user has active period
+        $activePeriod = $user->getOrCreateActivePeriod();
+
+        // Statistics for CURRENT PERIOD only
+        $pengeluaranBulanIni = Transaksi::where('period_id', $activePeriod->id)
+            ->where('jenis', 'pengeluaran')
             ->sum('nominal');
 
-        // Pengeluaran bulan kemarin (semua user)
-        $pengeluaranBulanKemarin = Transaksi::where('jenis', 'pengeluaran')
-            ->whereMonth('tanggal', Carbon::now()->subMonth()->month)
-            ->whereYear('tanggal', Carbon::now()->subMonth()->year)
+        $pemasukanBulanIni = Transaksi::where('period_id', $activePeriod->id)
+            ->where('jenis', 'pemasukan')
             ->sum('nominal');
 
-        // Pengeluaran sepanjang masa (semua user)
-        $pengeluaranTotal = Transaksi::where('jenis', 'pengeluaran')
-            ->sum('nominal');
+        // Last period statistics
+        $lastPeriod = $user->periods()
+            ->where('is_active', false)
+            ->orderBy('end_date', 'desc')
+            ->first();
 
-        // Pemasukan sepanjang masa (semua user)
-        $pemasukanTotal = Transaksi::where('jenis', 'pemasukan')
-            ->sum('nominal');
+        $pengeluaranBulanKemarin = $lastPeriod?->total_pengeluaran ?? 0;
+        $pemasukanBulanKemarin = $lastPeriod?->total_pemasukan ?? 0;
 
-        // Selisih sepanjang masa
+        // All-time totals (sum of all archived periods + current)
+        $pengeluaranTotal = $user->periods()->sum('total_pengeluaran') + $pengeluaranBulanIni;
+        $pemasukanTotal = $user->periods()->sum('total_pemasukan') + $pemasukanBulanIni;
         $selisihTotal = $pemasukanTotal - $pengeluaranTotal;
-
-        // Pemasukan bulan ini (semua user)
-        $pemasukanBulanIni = Transaksi::where('jenis', 'pemasukan')
-            ->whereMonth('tanggal', Carbon::now()->month)
-            ->whereYear('tanggal', Carbon::now()->year)
-            ->sum('nominal');
-
-        // Pemasukan bulan kemarin (semua user)
-        $pemasukanBulanKemarin = Transaksi::where('jenis', 'pemasukan')
-            ->whereMonth('tanggal', Carbon::now()->subMonth()->month)
-            ->whereYear('tanggal', Carbon::now()->subMonth()->year)
-            ->sum('nominal');
-
-        // Selisih bulan ini (pemasukan - pengeluaran)
         $selisihBulanIni = $pemasukanBulanIni - $pengeluaranBulanIni;
 
-        // Transaksi terbaru dengan pagination (10 per halaman) - semua user
-        $transaksiTerbaru = Transaksi::with('user')
+        // Recent transactions (current period only)
+        $transaksiTerbaru = Transaksi::with(['user', 'category'])
+            ->where('period_id', $activePeriod->id)
             ->where('jenis', 'pengeluaran')
             ->latest('tanggal')
             ->latest('created_at')
             ->paginate(10);
+
+        // User categories
+        $categories = $user->categories()->orderBy('name')->get();
 
         return Inertia::render('dashboard', [
             'statistics' => [
@@ -68,6 +63,8 @@ class DashboardController extends Controller
                 'selisih_total' => $selisihTotal,
             ],
             'transaksi_terbaru' => $transaksiTerbaru,
+            'active_period' => $activePeriod,
+            'categories' => $categories,
         ]);
     }
 }

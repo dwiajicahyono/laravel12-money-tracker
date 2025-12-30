@@ -25,6 +25,13 @@ import {
 import { useState, FormEvent } from 'react';
 import { toast } from 'sonner';
 
+interface Category {
+    id: number;
+    name: string;
+    color: string | null;
+    icon: string | null;
+}
+
 interface Transaksi {
     id: number;
     nama_transaksi: string;
@@ -37,6 +44,7 @@ interface Transaksi {
         id: number;
         name: string;
     };
+    category?: Category | null;
 }
 
 interface PaginatedTransaksi {
@@ -49,6 +57,7 @@ interface PaginatedTransaksi {
 
 interface Props {
     transaksis: PaginatedTransaksi;
+    categories: Category[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -62,12 +71,14 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Index({ transaksis }: Props) {
+export default function Index({ transaksis, categories }: Props) {
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+    const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
     const [selectedTransaksi, setSelectedTransaksi] =
         useState<Transaksi | null>(null);
+    const [localCategories, setLocalCategories] = useState<Category[]>(categories);
 
     const getTodayDate = () => {
         const today = new Date();
@@ -79,6 +90,7 @@ export default function Index({ transaksis }: Props) {
         nominal: '',
         tanggal: getTodayDate(),
         jenis: 'pengeluaran' as 'pemasukan' | 'pengeluaran',
+        category_id: '',
     });
 
     const editForm = useForm({
@@ -86,6 +98,11 @@ export default function Index({ transaksis }: Props) {
         nominal: '',
         tanggal: '',
         jenis: 'pemasukan' as 'pemasukan' | 'pengeluaran',
+        category_id: '',
+    });
+
+    const addCategoryForm = useForm({
+        name: '',
     });
 
     const handleOpenCreate = () => {
@@ -94,8 +111,39 @@ export default function Index({ transaksis }: Props) {
             nominal: '',
             tanggal: getTodayDate(),
             jenis: 'pengeluaran',
+            category_id: '',
         });
         setIsCreateOpen(true);
+    };
+
+    const handleAddCategory = async (e: FormEvent) => {
+        e.preventDefault();
+
+        try {
+            const response = await fetch('/categories', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify({
+                    name: addCategoryForm.data.name,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to create category');
+            }
+
+            const newCategory: Category = await response.json();
+            setLocalCategories([...localCategories, newCategory]);
+            createForm.setData('category_id', newCategory.id.toString());
+            setIsAddCategoryOpen(false);
+            addCategoryForm.reset();
+            toast.success('Kategori berhasil ditambahkan!');
+        } catch (error) {
+            toast.error('Gagal menambahkan kategori');
+        }
     };
 
     const handleCreate = (e: FormEvent) => {
@@ -119,6 +167,7 @@ export default function Index({ transaksis }: Props) {
             nominal: item.nominal,
             tanggal: item.tanggal,
             jenis: item.jenis,
+            category_id: item.category?.id.toString() || '',
         });
         setIsEditOpen(true);
     };
@@ -216,6 +265,9 @@ export default function Index({ transaksis }: Props) {
                                         Nama Transaksi
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                                        Kategori
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
                                         Nominal
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
@@ -233,7 +285,7 @@ export default function Index({ transaksis }: Props) {
                                 {transaksis.data.length === 0 ? (
                                     <tr>
                                         <td
-                                            colSpan={6}
+                                            colSpan={7}
                                             className="px-6 py-8 text-center text-neutral-500"
                                         >
                                             Belum ada transaksi
@@ -253,6 +305,15 @@ export default function Index({ transaksis }: Props) {
                                             </td>
                                             <td className="whitespace-nowrap px-6 py-4 text-sm text-neutral-900 dark:text-neutral-100">
                                                 {item.nama_transaksi}
+                                            </td>
+                                            <td className="whitespace-nowrap px-6 py-4 text-sm text-neutral-900 dark:text-neutral-100">
+                                                {item.category ? (
+                                                    <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                        {item.category.name}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs text-neutral-400">-</span>
+                                                )}
                                             </td>
                                             <td className="whitespace-nowrap px-6 py-4 text-sm text-neutral-900 dark:text-neutral-100">
                                                 {formatCurrency(item.nominal)}
@@ -457,6 +518,43 @@ export default function Index({ transaksis }: Props) {
                                     </p>
                                 )}
                             </div>
+                            <div className="grid gap-2">
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="create-category">Kategori (Opsional)</Label>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setIsAddCategoryOpen(true)}
+                                        className="h-auto py-1 px-2 text-xs"
+                                    >
+                                        <Plus className="h-3 w-3 mr-1" />
+                                        Tambah Baru
+                                    </Button>
+                                </div>
+                                <Select
+                                    value={createForm.data.category_id || undefined}
+                                    onValueChange={(value) =>
+                                        createForm.setData('category_id', value)
+                                    }
+                                >
+                                    <SelectTrigger id="create-category">
+                                        <SelectValue placeholder="Pilih kategori (opsional)" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {localCategories.map((category) => (
+                                            <SelectItem key={category.id} value={category.id.toString()}>
+                                                {category.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {createForm.errors.category_id && (
+                                    <p className="text-sm text-red-600">
+                                        {createForm.errors.category_id}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                         <DialogFooter>
                             <Button
@@ -576,6 +674,43 @@ export default function Index({ transaksis }: Props) {
                                     </p>
                                 )}
                             </div>
+                            <div className="grid gap-2">
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="edit-category">Kategori (Opsional)</Label>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setIsAddCategoryOpen(true)}
+                                        className="h-auto py-1 px-2 text-xs"
+                                    >
+                                        <Plus className="h-3 w-3 mr-1" />
+                                        Tambah Baru
+                                    </Button>
+                                </div>
+                                <Select
+                                    value={editForm.data.category_id || undefined}
+                                    onValueChange={(value) =>
+                                        editForm.setData('category_id', value)
+                                    }
+                                >
+                                    <SelectTrigger id="edit-category">
+                                        <SelectValue placeholder="Pilih kategori (opsional)" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {localCategories.map((category) => (
+                                            <SelectItem key={category.id} value={category.id.toString()}>
+                                                {category.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {editForm.errors.category_id && (
+                                    <p className="text-sm text-red-600">
+                                        {editForm.errors.category_id}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                         <DialogFooter>
                             <Button
@@ -624,6 +759,54 @@ export default function Index({ transaksis }: Props) {
                             Hapus
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Add Category Dialog */}
+            <Dialog open={isAddCategoryOpen} onOpenChange={setIsAddCategoryOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Tambah Kategori Baru</DialogTitle>
+                        <DialogDescription>
+                            Buat kategori baru untuk mengorganisir transaksi Anda
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleAddCategory}>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="category-name">Nama Kategori</Label>
+                                <Input
+                                    id="category-name"
+                                    value={addCategoryForm.data.name}
+                                    onChange={(e) =>
+                                        addCategoryForm.setData('name', e.target.value)
+                                    }
+                                    placeholder="Misal: Makanan, Transport, Belanja"
+                                    required
+                                />
+                                {addCategoryForm.errors.name && (
+                                    <p className="text-sm text-red-600">
+                                        {addCategoryForm.errors.name}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsAddCategoryOpen(false)}
+                            >
+                                Batal
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={addCategoryForm.processing}
+                            >
+                                Simpan
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
         </AppLayout>

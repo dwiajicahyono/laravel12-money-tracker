@@ -15,7 +15,7 @@ import transaksi from '@/routes/transaksi';
 import anggota from '@/routes/anggota';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, Wallet, Users } from 'lucide-react';
+import { BookOpen, Folder, LayoutGrid, Wallet, Users, Tags } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -33,6 +33,11 @@ const mainNavItems: NavItem[] = [
         title: 'Anggota',
         href: anggota.index(),
         icon: Users,
+    },
+    {
+        title: 'Kategori',
+        href: '/categories',
+        icon: Tags,
     },
 ];
 

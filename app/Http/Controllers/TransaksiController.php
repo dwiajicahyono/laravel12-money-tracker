@@ -13,12 +13,20 @@ class TransaksiController extends Controller
      */
     public function index()
     {
-        $transaksis = Transaksi::with('user')
+        $user = auth()->user();
+        $activePeriod = $user->activePeriod();
+
+        $transaksis = Transaksi::with(['user', 'category'])
+            ->where('period_id', $activePeriod?->id)
             ->latest()
             ->paginate(10);
 
+        $categories = $user->categories()->orderBy('name')->get();
+
         return Inertia::render('transaksi/index', [
             'transaksis' => $transaksis,
+            'active_period' => $activePeriod,
+            'categories' => $categories,
         ]);
     }
 
@@ -40,9 +48,14 @@ class TransaksiController extends Controller
             'nominal' => 'required|numeric|min:0',
             'tanggal' => 'required|date',
             'jenis' => 'required|in:pemasukan,pengeluaran',
+            'category_id' => 'nullable|exists:categories,id',
         ]);
 
-        $validated['user_id'] = auth()->user()->id;
+        $user = auth()->user();
+        $activePeriod = $user->getOrCreateActivePeriod();
+
+        $validated['user_id'] = $user->id;
+        $validated['period_id'] = $activePeriod->id;
 
         Transaksi::create($validated);
 
@@ -78,6 +91,7 @@ class TransaksiController extends Controller
             'nominal' => 'required|numeric|min:0',
             'tanggal' => 'required|date',
             'jenis' => 'required|in:pemasukan,pengeluaran',
+            'category_id' => 'nullable|exists:categories,id',
         ]);
 
         $transaksi->update($validated);

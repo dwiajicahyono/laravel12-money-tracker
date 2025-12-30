@@ -2,7 +2,7 @@ import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { Calendar, TrendingDown, TrendingUp, Wallet, DollarSign, ArrowLeftRight, Plus } from 'lucide-react';
+import { Calendar, TrendingDown, TrendingUp, Wallet, DollarSign, ArrowLeftRight, Plus, History, RotateCcw } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,6 +26,13 @@ import { useState, FormEvent } from 'react';
 import { toast } from 'sonner';
 import transaksi from '@/routes/transaksi';
 
+interface Category {
+    id: number;
+    name: string;
+    color: string | null;
+    icon: string | null;
+}
+
 interface Transaksi {
     id: number;
     nama_transaksi: string;
@@ -35,6 +42,7 @@ interface Transaksi {
     user: {
         name: string;
     };
+    category?: Category | null;
 }
 
 interface PaginatedTransaksi {
@@ -56,9 +64,19 @@ interface Statistics {
     selisih_total: number;
 }
 
+interface ActivePeriod {
+    id: number;
+    period_name: string;
+    start_date: string;
+    end_date: string;
+    is_active: boolean;
+}
+
 interface Props {
     statistics: Statistics;
     transaksi_terbaru: PaginatedTransaksi;
+    active_period: ActivePeriod;
+    categories: Category[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -68,8 +86,11 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
+export default function Dashboard({ statistics, transaksi_terbaru, active_period, categories }: Props) {
     const [isCreateOpen, setIsCreateOpen] = useState(false);
+    const [isResetOpen, setIsResetOpen] = useState(false);
+    const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+    const [localCategories, setLocalCategories] = useState<Category[]>(categories);
 
     const getTodayDate = () => {
         const today = new Date();
@@ -81,6 +102,15 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
         nominal: '',
         tanggal: getTodayDate(),
         jenis: 'pengeluaran' as 'pemasukan' | 'pengeluaran',
+        category_id: '',
+    });
+
+    const addCategoryForm = useForm({
+        name: '',
+    });
+
+    const resetForm = useForm({
+        start_date: getTodayDate(),
     });
 
     const handleOpenCreate = () => {
@@ -89,8 +119,39 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
             nominal: '',
             tanggal: getTodayDate(),
             jenis: 'pengeluaran',
+            category_id: '',
         });
         setIsCreateOpen(true);
+    };
+
+    const handleAddCategory = async (e: FormEvent) => {
+        e.preventDefault();
+
+        try {
+            const response = await fetch('/categories', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify({
+                    name: addCategoryForm.data.name,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to create category');
+            }
+
+            const newCategory: Category = await response.json();
+            setLocalCategories([...localCategories, newCategory]);
+            createForm.setData('category_id', newCategory.id.toString());
+            setIsAddCategoryOpen(false);
+            addCategoryForm.reset();
+            toast.success('Kategori berhasil ditambahkan!');
+        } catch (error) {
+            toast.error('Gagal menambahkan kategori');
+        }
     };
 
     const handleCreate = (e: FormEvent) => {
@@ -105,6 +166,39 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
                 toast.error('Gagal menambahkan transaksi');
             },
         });
+    };
+
+    const handleResetOpen = () => {
+        resetForm.setData('start_date', getTodayDate());
+        setIsResetOpen(true);
+    };
+
+    const handleReset = () => {
+        resetForm.post('/period/reset', {
+            onSuccess: () => {
+                setIsResetOpen(false);
+                toast.success('Periode berhasil direset!');
+            },
+            onError: () => {
+                toast.error('Gagal mereset periode');
+            },
+        });
+    };
+
+    const formatDate = (dateString: string) => {
+        return new Date(dateString).toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+        });
+    };
+
+    const getDaysSince = (dateString: string) => {
+        const startDate = new Date(dateString);
+        const today = new Date();
+        const diffTime = Math.abs(today.getTime() - startDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays;
     };
 
     const formatCurrency = (amount: number) => {
@@ -202,12 +296,38 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Dashboard" />
             <div className="flex h-full flex-1 flex-col gap-4 p-4">
-                <div className="flex items-center justify-between">
-                    <h1 className="text-2xl font-bold">Dashboard</h1>
-                    <Button onClick={handleOpenCreate}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Tambah Transaksi
-                    </Button>
+                {/* Period Header */}
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold">Dashboard</h1>
+                        {active_period && (
+                            <div className="mt-1">
+                                <p className="text-sm font-medium text-muted-foreground">
+                                    Periode Aktif: {active_period.period_name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    {formatDate(active_period.start_date)} - {formatDate(active_period.end_date)}
+                                </p>
+                                <p className="text-xs font-semibold text-primary mt-0.5">
+                                    Dimulai sejak: {formatDate(active_period.start_date)}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => window.location.href = '/period'}>
+                            <History className="mr-2 h-4 w-4" />
+                            Riwayat Periode
+                        </Button>
+                        <Button variant="destructive" onClick={handleResetOpen}>
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Reset Periode
+                        </Button>
+                        <Button onClick={handleOpenCreate}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Tambah Transaksi
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Statistics Cards */}
@@ -371,6 +491,9 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
                                         Nama Transaksi
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                                        Kategori
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
                                         Nominal
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
@@ -385,7 +508,7 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
                                 {transaksi_terbaru.data.length === 0 ? (
                                     <tr>
                                         <td
-                                            colSpan={4}
+                                            colSpan={5}
                                             className="px-6 py-8 text-center text-neutral-500"
                                         >
                                             Belum ada pengeluaran
@@ -399,6 +522,15 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
                                         >
                                             <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-neutral-900 dark:text-neutral-100">
                                                 {item.nama_transaksi}
+                                            </td>
+                                            <td className="whitespace-nowrap px-6 py-4 text-sm text-neutral-900 dark:text-neutral-100">
+                                                {item.category ? (
+                                                    <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                        {item.category.name}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs text-neutral-400">-</span>
+                                                )}
                                             </td>
                                             <td className="whitespace-nowrap px-6 py-4 text-sm text-neutral-900 dark:text-neutral-100">
                                                 <span className="font-semibold text-red-600 dark:text-red-400">
@@ -574,6 +706,43 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
                                     </p>
                                 )}
                             </div>
+                            <div className="grid gap-2">
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="create-category">Kategori (Opsional)</Label>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setIsAddCategoryOpen(true)}
+                                        className="h-auto py-1 px-2 text-xs"
+                                    >
+                                        <Plus className="h-3 w-3 mr-1" />
+                                        Tambah Baru
+                                    </Button>
+                                </div>
+                                <Select
+                                    value={createForm.data.category_id || undefined}
+                                    onValueChange={(value) =>
+                                        createForm.setData('category_id', value)
+                                    }
+                                >
+                                    <SelectTrigger id="create-category">
+                                        <SelectValue placeholder="Pilih kategori (opsional)" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {localCategories.map((category) => (
+                                            <SelectItem key={category.id} value={category.id.toString()}>
+                                                {category.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {createForm.errors.category_id && (
+                                    <p className="text-sm text-red-600">
+                                        {createForm.errors.category_id}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                         <DialogFooter>
                             <Button
@@ -586,6 +755,119 @@ export default function Dashboard({ statistics, transaksi_terbaru }: Props) {
                             <Button
                                 type="submit"
                                 disabled={createForm.processing}
+                            >
+                                Simpan
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Reset Period Confirmation Dialog */}
+            <Dialog open={isResetOpen} onOpenChange={setIsResetOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Reset Periode?</DialogTitle>
+                        <DialogDescription>
+                            {active_period && (
+                                <div className="mb-4 p-3 bg-muted/50 rounded-md border">
+                                    <p className="text-sm font-semibold text-foreground mb-1">
+                                        Periode saat ini dimulai:
+                                    </p>
+                                    <p className="text-sm font-medium text-foreground">
+                                        {formatDate(active_period.start_date)}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        ({getDaysSince(active_period.start_date)} hari yang lalu)
+                                    </p>
+                                </div>
+                            )}
+
+                            Tindakan ini akan:
+                            <ul className="list-disc ml-6 mt-2 space-y-1 text-sm">
+                                <li>Mengarsipkan semua transaksi periode saat ini</li>
+                                <li>Membuat periode baru dimulai dari tanggal yang Anda pilih</li>
+                                <li>Dashboard akan menampilkan data periode baru (dimulai dari 0)</li>
+                                <li>Data lama tetap tersimpan dan dapat diakses di Riwayat Periode</li>
+                            </ul>
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="reset-start-date">
+                                Pilih Tanggal Mulai Periode Baru
+                            </Label>
+                            <Input
+                                id="reset-start-date"
+                                type="date"
+                                value={resetForm.data.start_date}
+                                onChange={(e) => resetForm.setData('start_date', e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Anda bisa mundur beberapa hari jika lupa mencatat transaksi
+                            </p>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsResetOpen(false)}
+                        >
+                            Batal
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleReset}
+                            disabled={resetForm.processing}
+                        >
+                            {resetForm.processing ? 'Mereset...' : 'Ya, Reset Periode'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Add Category Dialog */}
+            <Dialog open={isAddCategoryOpen} onOpenChange={setIsAddCategoryOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Tambah Kategori Baru</DialogTitle>
+                        <DialogDescription>
+                            Buat kategori baru untuk mengorganisir transaksi Anda
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleAddCategory}>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="category-name">Nama Kategori</Label>
+                                <Input
+                                    id="category-name"
+                                    value={addCategoryForm.data.name}
+                                    onChange={(e) =>
+                                        addCategoryForm.setData('name', e.target.value)
+                                    }
+                                    placeholder="Misal: Makanan, Transport, Belanja"
+                                    required
+                                />
+                                {addCategoryForm.errors.name && (
+                                    <p className="text-sm text-red-600">
+                                        {addCategoryForm.errors.name}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsAddCategoryOpen(false)}
+                            >
+                                Batal
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={addCategoryForm.processing}
                             >
                                 Simpan
                             </Button>
